@@ -1,0 +1,99 @@
+
+name: Terraform Azure Deployment
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select deployment environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  contents: read
+
+env:
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  TF_VAR_admin_password: ${{ secrets.TF_VAR_ADMIN_PASSWORD }}
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform:
+    name: Terraform Azure Deployment
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    concurrency:
+      group: terraform-${{ github.event.inputs.environment || 'dev' }}
+      cancel-in-progress: false
+
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Install Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      # 3. Azure OIDC Login
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # 4. Terraform Init
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      # 5. Terraform Format
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      # 6. Terraform Validate
+      - name: Terraform Validate
+        run: terraform validate
+
+      # 7. Select or create workspace
+      - name: Select Terraform Workspace
+        run: |
+          terraform workspace select "$ENVIRONMENT" || \
+          terraform workspace new "$ENVIRONMENT"
+
+      # 8. Terraform Plan
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -input=false \
+            -var-file="environments/${ENVIRONMENT}.tfvars" \
+            -out=tfplan
+
+      # 9. Terraform Apply
+      - name: Terraform Apply
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: terraform apply -input=false -auto-approve tfplan
