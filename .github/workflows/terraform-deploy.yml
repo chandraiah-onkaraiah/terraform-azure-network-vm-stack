@@ -5,9 +5,27 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '.github/**'
+      - '**/*.md'
+      - '.gitignore'
+      - '**/.gitignore'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CODEOWNERS'
+      - '**/*.json'
   pull_request:
     branches:
       - master
+    paths-ignore:
+      - '.github/**'
+      - '**/*.md'
+      - '.gitignore'
+      - '**/.gitignore'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CODEOWNERS'
+      - '**/*.json'
 
   workflow_dispatch:
     inputs:
